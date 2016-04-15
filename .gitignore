@@ -1,0 +1,14 @@
+node_modules
+dist
+typings
+*.DS_Store
+*.tgz
+build
+
+# save private notes here
+/notes
+
+# IDE-related
+*.sublime-workspace
+*.sublime-project
+/.vscode

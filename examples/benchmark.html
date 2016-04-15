@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Simple</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style type="text/css">
+	body, html {
+		background: #234;
+		color: white;
+	}
+	canvas {
+		position: absolute;
+		left: 0; top: 0; right: 0; bottom: 0;
+		width: 100%; height: 100%;
+	}
+	</style>
+</head>
+<body>
+	<p id="modeView">
+	</p>
+	<script src="https://code.jquery.com/jquery-2.2.2.min.js"></script>
+	<script src="js/stats.min.js"></script>
+	<script type="text/javascript" src="../build/hyper2d.js"></script>
+	<script>
+
+		$(function () {
+			"use strict";
+
+			const stats = new Stats();
+			stats.showPanel(1);
+			$("body").append(stats.dom);
+			
+			var shapePoints = [];
+			for (var i = 0; i < 40; ++i) {
+				var ang = i / 40 * Math.PI * 2;
+				var scale = 0.2 + Math.random() * 1;
+				shapePoints.push(Math.cos(ang) * scale);
+				shapePoints.push(Math.sin(ang) * scale);
+			}
+			function buildShape(ctx)
+			{
+				ctx.moveTo(1, 0);/*
+				ctx.quadraticCurveTo(1, -1, 1, 0);
+				ctx.quadraticCurveTo(1, 1, 0, 1);
+				ctx.quadraticCurveTo(-1, 1, -1, 0);
+				ctx.quadraticCurveTo(-1, -1, 0, -1);*/
+				for (var i = 0; i < shapePoints.length; i += 4) {
+					ctx.quadraticCurveTo(
+						shapePoints[i],
+						shapePoints[i + 1],
+						shapePoints[i + 2],
+						shapePoints[i + 3]);
+				}
+			}
+
+			function Hyper2DRunner()
+			{
+				var self = this;
+
+				this.name = "Hyper2D";
+
+				var canvas = $('<canvas>');
+				this.canvas = canvas;
+
+				var opt = { alpha: true, premultipliedAlpha: true };
+				var gl = canvas[0].getContext('webgl', opt) ||
+					canvas[0].getContext('webgl-experimental', opt);
+
+				var context = this.context = Hyper2D.createContext(gl, {
+					fastSetup: true
+				});
+				this.hyperCanvas = null;
+
+				var pr = this.pr = window.devicePixelRatio || 
+					window.webkitDevicePixelRatio || 1;
+				var ss = 1;
+
+				function resize()
+				{
+					var width = $(window).width();
+					var height = $(window).height();
+					canvas[0].width = width * pr;
+					canvas[0].height = height * pr;
+
+					self.width = width * pr * ss;
+					self.height = height * pr * ss;
+
+					self.hyperCanvas = context.createCanvas(width * pr * ss, height * pr * ss); 
+				}
+				$(window).resize(resize);
+				resize();
+
+				var paints = this.paints = [];
+				for (var i = 0; i < 8; ++i) {
+					var stops = [
+						{pos: 1, color: new Hyper2D.Color(0, 0, 0, 0.5)},
+					];
+					for (var k = 0; k < 50; ++k) {
+						stops.push({
+							pos: k / 50,
+							color: new Hyper2D.Color(Math.random(), Math.random(), Math.random(), 0.8)
+						});
+					}
+
+					paints.push(new Hyper2D.RadialGradientPaint(
+						stops, Hyper2D.GradientSpread.Pad, 
+						Hyper2D.GradientInterpolation.RGB,
+						{ x: 0, y: 0 }, { x: 1, y: 0 }
+					));
+				}
+				this.circle = function () {
+					var pathBuilder = new Hyper2D.PathBuilder();
+					buildShape(pathBuilder);
+					return pathBuilder.createPath(Hyper2D.PathUsage.Static);
+				} ();
+
+				this.stroke = new Hyper2D.StrokeStyle(
+					.1, Hyper2D.StrokeJoinStyle.Round,
+					Hyper2D.StrokeCapStyle.Round, 4);
+
+			}
+			Hyper2DRunner.prototype.render = function (cb) {
+				var hyperCanvas = this.hyperCanvas;
+				var context = this.context;
+				var paints = this.paints;
+				var canvas = this.canvas;
+
+				hyperCanvas.clear(new Hyper2D.Color(0, 0, 0, 0));
+
+				var m = new Hyper2D.Matrix3();
+				var self = this;
+
+				cb({
+					drawBall: function (x, y, size, type) {
+						m.setScaling(size);
+						m.e[6] = x;
+						m.e[7] = y;
+						hyperCanvas.setTransform(m);
+						hyperCanvas.fill(paints[type], Hyper2D.FillRule.NonZero, self.circle);
+						hyperCanvas.stroke(paints[(type+1) % paints.length], self.stroke, self.circle);
+					}
+				});
+
+				context.setup();
+				hyperCanvas.resolve();
+				context.unsetup();
+
+				hyperCanvas.copyToDefaultFramebuffer(0, 0, 
+					canvas[0].width, canvas[0].height);
+
+			};
+
+			function Canvas2DRunner()
+			{
+				var self = this;
+
+				this.name = "Canvas";
+
+				var canvas = $('<canvas>');
+				this.canvas = canvas;
+
+				var ctx = canvas[0].getContext('2d');
+
+				function resize()
+				{
+					var width = $(window).width();
+					var height = $(window).height();
+					var pr = window.devicePixelRatio || 
+						window.webkitDevicePixelRatio || 1;
+					canvas[0].width = width * pr;
+					canvas[0].height = height * pr;
+					self.width = width * pr;
+					self.height = height * pr;
+				}
+				$(window).resize(resize);
+				resize();
+
+				var paints = this.paints = [];
+				for (var i = 0; i < 8; ++i) {
+					var grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+					for (var k = 0; k < 50; ++k)
+						grad.addColorStop(k / 50, "rgba(" +
+							(Math.random() * 255|0) + "," +
+							(Math.random() * 255|0) + "," +
+							(Math.random() * 255|0) + ",0.8)");
+					grad.addColorStop(1, "rgba(0,0,0,0.5)");
+					paints.push(grad);
+				}
+			}
+			Canvas2DRunner.prototype.render = function (cb) {
+				var paints = this.paints;
+				var canvas = this.canvas;
+				canvas[0].width += 0; // clear
+
+				var ctx = canvas[0].getContext("2d");
+
+				var self = this;
+
+						ctx.lineWidth = 0.1;
+				ctx.lineCap = "round";
+				ctx.lineJoin = "round";
+				ctx.miterLimit = 4;
+
+				cb({
+					drawBall: function (x, y, size, type) {
+						ctx.save();
+						ctx.translate(x, y);
+						ctx.scale(size, size);
+						ctx.fillStyle = paints[type];
+						ctx.beginPath();
+						buildShape(ctx);
+						ctx.fill();
+						ctx.strokeStyle = paints[(type + 1) % paints.length];
+						ctx.stroke();
+						ctx.restore();
+					}
+				});
+
+			};
+
+			
+			var currentRunner = null;
+
+			function setRunner(newRunner)
+			{
+				if (currentRunner) {
+					currentRunner.canvas.remove();
+				}
+				currentRunner = newRunner;
+				currentRunner.canvas.appendTo("body");
+
+				$("#modeView").text("Mode: " + currentRunner.name);
+				currentRunner.canvas.click(function () {
+					if (currentRunner instanceof Hyper2DRunner) {
+						setRunner(new Canvas2DRunner());
+					} else {
+						setRunner(new Hyper2DRunner());
+					}
+				});
+			}
+
+			setRunner(new Hyper2DRunner());
+
+			var pos = this.pos = [];
+			for (var i = 0; i < 200; ++i) {
+				pos.push(Math.random());
+				pos.push(Math.random());
+			}
+
+			function render()
+			{
+				stats.begin();
+
+				currentRunner.render(function (api) {
+					var sz = currentRunner.height / 25;
+					var t = +new Date() / 1000;
+					for (var i = 0; i < pos.length; i += 2) {
+						var t2 = t * (1 + i / 10000);
+						var x = pos[i] *  currentRunner.width + sz * Math.sin(i + t2);
+						var y = pos[i + 1] *  currentRunner.height + sz * Math.cos(i * 1.5 + t2);
+						var spriteSize = sz * Math.pow(1.1 + 0.5 * Math.sin(i * 1.8 + t2), 2);
+						api.drawBall(x, y, spriteSize, i & 7);
+					}
+				});
+
+				stats.end();
+
+				requestAnimationFrame(render);
+			}
+			render();
+		});
+
+	</script>
+
+</body>
+</html>

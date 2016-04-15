@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Manipulation</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style type="text/css">
+	body, html {
+		background: #234;
+		color: #567;
+	}
+	canvas {
+		position: absolute;
+		left: 0; top: 0; right: 0; bottom: 0;
+		width: 100%; height: 100%;
+	}
+	</style>
+</head>
+<body>
+	<p>
+		Background content
+	</p>
+	<script src="https://code.jquery.com/jquery-2.2.2.min.js"></script>
+	<script src="js/stats.min.js"></script>
+	<script type="text/javascript" src="../build/hyper2d.js"></script>
+	<script>
+
+		$(function () {
+			"use strict";
+
+			const stats = new Stats();
+			stats.showPanel(1);
+			$("body").append(stats.dom);
+
+			const canvas = $('<canvas>').appendTo('body');
+			const opt = { antialias: false, alpha: false, depth: false, 
+				stencil: false, preserveDrawingBuffer: false };
+			const gl = canvas[0].getContext('webgl', opt) ||
+				canvas[0].getContext('webgl-experimental', opt);
+
+			const context = Hyper2D.createContext(gl, {
+				fastSetup: true
+			});
+			let hyperCanvas = null;
+			const pr = window.devicePixelRatio || 
+				window.webkitDevicePixelRatio || 1;
+			const supersample = 2;
+
+			const canvas2 = $('<canvas>').appendTo('body')
+				.css("pointer-events", "none");
+
+			function resize()
+			{
+				const width = $(window).width();
+				const height = $(window).height();
+				canvas[0].width = width * pr;
+				canvas[0].height = height * pr;
+				canvas2[0].width = width * pr;
+				canvas2[0].height = height * pr;
+				hyperCanvas = context.createCanvas(width * pr * supersample, height * pr * supersample);
+			}
+			$(window).resize(resize);
+			resize();
+
+			const points = [];
+			for (let i = 0; i < 2 + 3; ++i) {
+				points.push({
+					x: Math.random() * 500 + 50,
+					y: Math.random() * 500 + 50
+				});
+			}
+			let hover = null;
+			let drag = null;
+
+			canvas.mousemove((e) => {
+				hover = null;
+				const {clientX: x, clientY: y} = e;
+				for (let point of points) {
+					const dx = point.x - x, dy = point.y - y;
+					if (dx * dx + dy * dy < 10 * 10) {
+						hover = point;
+					}
+				}
+				scheduleRender();
+			});
+			canvas.mousedown((e) => {
+				if (hover === null) {
+					return;
+				}
+				drag = hover;
+			});
+			canvas.mousemove((e) => {
+				if (drag) {
+					drag.x = e.clientX;
+					drag.y = e.clientY;
+					scheduleRender();
+				}
+			});
+			canvas.mouseup((e) => {
+				drag = null;
+			});
+
+			const stops = [
+				{ pos: 0 / 6, color: new Hyper2D.Color(1, 0, 0, .7) },
+				{ pos: 1 / 6, color: new Hyper2D.Color(1, 1, 0, .7) },
+				{ pos: 2 / 6, color: new Hyper2D.Color(0, 1, 0, .7) },
+				{ pos: 3 / 6, color: new Hyper2D.Color(0, 1, 1, .7) },
+				{ pos: 4 / 6, color: new Hyper2D.Color(0, 0, 1, .7) },
+				{ pos: 5 / 6, color: new Hyper2D.Color(1, 0, 1, .7) },
+				{ pos: 6 / 6, color: new Hyper2D.Color(1, 0, 0, .7) },
+			];
+
+			let paint = new Hyper2D.SolidPaint(
+				new Hyper2D.Color(0.5, 0.5, 0.5, 1));
+			let paint2 = new Hyper2D.StrokeGradientPaint(
+				stops, Hyper2D.GradientSpread.Pad,
+				Hyper2D.GradientInterpolation.LinearRGB,
+				Hyper2D.StrokeGradientDirection.Across);
+			// paint2 = new Hyper2D.SolidPaint( new Hyper2D.Color(0, 0, 0.5, .5));;
+
+			const ctrlpPaint = new Hyper2D.SolidPaint(
+				new Hyper2D.Color(1, 0, 0, 1));
+
+			const stroke = new Hyper2D.StrokeStyle(
+				100, Hyper2D.StrokeJoinStyle.Round,
+				Hyper2D.StrokeCapStyle.Round, 4);
+
+			var circle = function () {
+				var pathBuilder = new Hyper2D.PathBuilder();
+				pathBuilder.arc(0, 0, 1, 0, Math.PI * 2);
+
+				return pathBuilder.createPath(Hyper2D.PathUsage.Static);
+			} ();
+			var circle2 = function () {
+				var pathBuilder = new Hyper2D.PathBuilder();
+				pathBuilder.arc(0, 0, 1, 0, Math.PI * 2);
+				pathBuilder.arc(0, 0, .9, 0, Math.PI * 2);
+
+				return pathBuilder.createPath(Hyper2D.PathUsage.Static);
+			} ();
+
+			function buildPath(ctx)
+			{
+				ctx.moveTo(points[0].x, points[0].y);
+				
+				ctx.lineTo(points[1].x, points[1].y);
+				for (let i = 2; i < points.length - 2; i += 3) {
+					if (false) {
+						ctx.bezierCurveTo(
+							points[i + 0].x, points[i + 0].y,
+							points[i + 1].x, points[i + 1].y,
+							points[i + 2].x, points[i + 2].y);
+					} else {
+						ctx.quadraticCurveTo(
+							points[i + 0].x, points[i + 0].y,
+							points[i + 1].x, points[i + 1].y);
+					}
+				}
+			}
+
+			let scheduled = false;
+			function scheduleRender()
+			{
+				if (!scheduled) {
+					scheduled = true;
+					requestAnimationFrame(render);
+				}
+			}
+
+			function render()
+			{
+				scheduled = false;
+				hyperCanvas.clear(new Hyper2D.Color(1, 1, 1, 1));
+
+				const pathBuilder = new Hyper2D.PathBuilder();
+				buildPath(pathBuilder);
+				const path = pathBuilder.createPath(Hyper2D.PathUsage.Dynamic);
+
+				const m = new Hyper2D.Matrix3();
+
+				m.setScaling(supersample * pr);
+				/* m.e[6] = supersample * 2, m.e[7] = supersample * 2;
+				hyperCanvas.setTransform(m);
+				hyperCanvas.fill(paint2, Hyper2D.FillRule.EvenOdd, path); */
+
+				m.e[6] = 0, m.e[7] = 0;
+				hyperCanvas.setTransform(m);
+				hyperCanvas.fill(paint, Hyper2D.FillRule.EvenOdd, path);
+				hyperCanvas.stroke(paint2, stroke, path);
+
+				for (let p of points) {
+					m.setScaling(pr * supersample * 4);
+					m.e[6] = p.x * supersample * pr; m.e[7] = p.y * supersample * pr;
+					hyperCanvas.setTransform(m);
+					hyperCanvas.fill(ctrlpPaint, Hyper2D.FillRule.EvenOdd, circle);
+
+					if (hover === p) {
+						m.setScaling(10 * supersample * pr);
+						m.e[6] = p.x * supersample * pr; m.e[7] = p.y * supersample * pr;
+						hyperCanvas.setTransform(m);
+						hyperCanvas.fill(ctrlpPaint, Hyper2D.FillRule.EvenOdd, circle2);
+					}
+				}
+
+				stats.begin();
+				context.setup();
+
+				hyperCanvas.resolve();
+
+				hyperCanvas.copyToDefaultFramebuffer(0, 0, 
+					canvas[0].width, canvas[0].height);
+
+				context.unsetup();
+				stats.end();
+
+				// debug
+				if (false) {
+					canvas2[0].width += 0; // clear
+					const ctx = canvas2[0].getContext('2d');
+					ctx.save();
+					ctx.scale(pr, pr);
+					ctx.beginPath();
+					buildPath(ctx);
+					ctx.lineStyle = "black";
+					//ctx.stroke();
+					ctx.fillStyle = "rgba(255,0,0,0.2)";
+					ctx.fill();
+
+					ctx.restore();
+				}
+			}
+
+			render();
+		});
+
+	</script>
+
+</body>
+</html>

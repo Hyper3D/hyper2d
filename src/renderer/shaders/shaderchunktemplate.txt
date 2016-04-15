@@ -1,0 +1,5 @@
+/// <reference path="../Prefix.d.ts" />
+
+import { GLShaderChunkMap } from "../core/glshaders";
+
+export const shaderChunks: GLShaderChunkMap = /*--SHADERS--*/;

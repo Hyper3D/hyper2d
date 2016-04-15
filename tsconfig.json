@@ -1,0 +1,39 @@
+{
+	"compilerOptions": {
+		"noImplicitAny": true,
+		"target": "ES5",
+		"module": "commonjs",
+		"outDir": "dist"
+	},
+	"files": [
+		"src/hyper3d.ts",
+		"src/renderer/core/backend.ts",
+		"src/renderer/core/canvas.ts",
+		"src/renderer/core/context.ts",
+		"src/renderer/core/data.ts",
+		"src/renderer/core/glshaders.ts",
+		"src/renderer/core/gradient.ts",
+		"src/renderer/core/paint.ts",
+		"src/renderer/core/path.ts",
+		"src/renderer/core/vertexbuffer.ts",
+		"src/renderer/frontend/canvas.ts",
+		"src/renderer/frontend/context.ts",
+		"src/renderer/frontend/drawingcontext.ts",
+		"src/renderer/frontend/drawingcontexthelper.ts",
+		"src/renderer/frontend/paint.ts",
+		"src/renderer/frontend/path.ts",
+		"src/renderer/frontend/sprite.ts",
+		"src/renderer/frontend/stroke.ts",
+		"src/renderer/gl/glextensions.ts",
+		"src/renderer/utils/advgeometry.ts",
+		"src/renderer/utils/geometry.ts",
+		"src/renderer/utils/buffer.ts",
+		"src/renderer/utils/color.ts",
+		"src/renderer/utils/math.ts",
+		"src/renderer/utils/overlapdetector.ts",
+		"src/renderer/utils/pack.ts",
+		"src/renderer/utils/pool.ts",
+		"src/renderer/utils/set.ts",
+		"src/renderer/utils/types.ts"
+	]
+}
