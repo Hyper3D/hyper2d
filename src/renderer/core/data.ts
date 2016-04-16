@@ -5,6 +5,8 @@ import {
     OESTextureFloat
 } from "../gl/glextensions";
 
+import { GLShaderManager } from "./glshaders";
+
 const DataWidthBits = 11;
 const DataWidth = 1 << DataWidthBits;
 
@@ -87,13 +89,22 @@ export class ShaderDataBuilder
         if (this.needsReallocation) {
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
                 this.width, this.height, 0, gl.RGBA, gl.FLOAT, null);
             this.needsReallocation = false;
         }
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height,
             gl.RGBA, gl.FLOAT, this.data);
+
+    }
+
+    updateGlobalUniform(shaderManager: GLShaderManager): void
+    {
+        const rW = 1 / this.width;
+        const rH = 1 / this.height;
+        shaderManager.setGlobalUniform("u_dataUVCoef",
+            rW * 0.5, rW * rH * 0.5, rW, rW * rH);
     }
 }

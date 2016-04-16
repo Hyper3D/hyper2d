@@ -1,5 +1,5 @@
 export interface DataFetchShader
 {
-    u_dataSize: WebGLUniformLocation;
+    u_dataUVCoef: WebGLUniformLocation;
     u_data: WebGLUniformLocation;
 }

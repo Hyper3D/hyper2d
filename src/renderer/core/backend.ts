@@ -292,10 +292,7 @@ export class Backend
 
         shaderDataBuilder.updateTexture();
         vertexBufferBuilder.updateBuffer();
-
-        shaderManager.setGlobalUniform("u_dataSize",
-            shaderDataBuilder.width, shaderDataBuilder.height,
-            1 / shaderDataBuilder.width, 1 / shaderDataBuilder.height);
+        shaderDataBuilder.updateGlobalUniform(shaderManager);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferBuilder.vbo);
         stateManager.bindTexture(gl.TEXTURE0, gl.TEXTURE_2D, shaderDataBuilder.texture);
