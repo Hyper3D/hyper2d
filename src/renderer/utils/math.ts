@@ -24,12 +24,12 @@ const deBruijnTable = [
 export const ulog2: (v: number) => number =
     imul ? (v: number) => {
         // have imul; use http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
-        v |= v >> 1;
-        v |= v >> 2;
-        v |= v >> 4;
-        v |= v >> 8;
-        v |= v >> 16;
-        return deBruijnTable[imul(v, 0x077cb531) >>> 27];
+        v |= v >>> 1;
+        v |= v >>> 2;
+        v |= v >>> 4;
+        v |= v >>> 8;
+        v |= v >>> 16;
+        return deBruijnTable[imul(v, 0x07C4ACDD) >>> 27];
     } : (v: number) => {
         let i = 0;
         while (v != 0) {
