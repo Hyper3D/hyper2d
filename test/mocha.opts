@@ -1,0 +1,5 @@
+--colors
+--reporter spec
+--ui tdd
+--compilers coffee:coffee-script/register
+test/unittest/**.coffee

@@ -8,10 +8,12 @@
     "prepublish": "npm run-script build",
     "watch": "gulp",
     "build": "gulp build",
-    "lib": "gulp js:lib"
+    "lib": "gulp js:lib",
+    "test": "mocha"
   },
   "keywords": [
-    "2d", "webgl"
+    "2d",
+    "webgl"
   ],
   "author": "yvt",
   "license": "MIT",
@@ -21,6 +23,7 @@
     "bower": "^1.4.1",
     "browserify": "^12.0.1",
     "browserify-global-shim": "^1.0.0",
+    "chai": "^3.5.0",
     "coffee-script": "^1.10.0",
     "del": "^2.0.0",
     "event-stream": "^3.3.1",
@@ -43,6 +46,7 @@
     "inquirer": "^0.11.0",
     "licensify": "^2.0.1",
     "main-bower-files": "^2.9.0",
+    "mocha": "^2.4.5",
     "multipipe": "^0.2.1",
     "requirejs": "^2.1.20",
     "through2": "^2.0.0",

@@ -34,6 +34,7 @@
 		"src/renderer/utils/pack.ts",
 		"src/renderer/utils/pool.ts",
 		"src/renderer/utils/set.ts",
+		"src/renderer/utils/heap.ts",
 		"src/renderer/utils/types.ts"
 	]
 }
