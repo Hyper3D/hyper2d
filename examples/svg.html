@@ -483,9 +483,9 @@
 					for (var x = -count; x <= count; ++x) {
 						for (var y = -count + (x & 1) * .5; y <= count; ++y) {
 							m.setScaling(supersample * pr);
-							m.multiply(new Hyper2D.Matrix3().setTranslation(cx + x * 300, cy + y * 300));
+							m.multiply(new Hyper2D.Matrix3().setTranslation(cx + x * 200, cy + y * 200));
 							m.multiply(new Hyper2D.Matrix3().setScaling(
-								.4 + Math.sin(t * 2 + x + y) * 0.1));
+								.3 + Math.sin(t * 2 + x + y) * 0.05));
 							m.multiply(new Hyper2D.Matrix3().setRotation(t * 0.1));
 							m.multiply(new Hyper2D.Matrix3().setTranslation(-100, -100));
 							svgImage.render(hyperCanvas, m);	
