@@ -1,10 +1,23 @@
 
+import { IDisposable } from "../utils/types";
+import { Signal } from "../utils/signal";
 import { Color } from "../utils/color";
 import { Vector2, Vector2Like } from "../utils/geometry";
 import { unmix } from "../utils/math";
 
-export class BasePaint
+export class BasePaint implements IDisposable
 {
+    onDisposed: Signal<void>;
+
+    constructor()
+    {
+        this.onDisposed = new Signal<void>();
+    }
+
+    dispose(): void
+    {
+        this.onDisposed.invoke(this, null);
+    }
 }
 
 export class SolidPaint extends BasePaint

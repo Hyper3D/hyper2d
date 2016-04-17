@@ -161,6 +161,10 @@ export class CanvasImpl implements Canvas
         this.reset();
     }
 
+    dispose(): void
+    {
+    }
+
     get context(): Context
     {
         return this.ctx;
@@ -235,8 +239,8 @@ export class CanvasImpl implements Canvas
     private addShapeCommon(paint: BasePaint, fillRule: FillRule, style: StrokeStyle, path: Path): void
     {
         const {backend} = this;
-        const compiledPath = globalPathCompiler.compile(path, style);
-        if (compiledPath == null) {
+        const residentPathset = this.ctx.vertexBufferManager.getResidentPath(path, style);
+        if (residentPathset.shapePath == null) {
             // empty path
             return;
         }
@@ -253,7 +257,7 @@ export class CanvasImpl implements Canvas
         const {visualBoundsMin, visualBoundsMax} = shape;
 
         computeBoundingBoxForTransformedAABB(this.currentTransform,
-            compiledPath.shapePath.boundingBoxMin, compiledPath.shapePath.boundingBoxMax,
+            residentPathset.boundingBoxMin, residentPathset.boundingBoxMax,
             visualBoundsMin, visualBoundsMax);
 
         const {boundsMin, boundsMax} = topClippingLayer;
@@ -274,12 +278,12 @@ export class CanvasImpl implements Canvas
         const compiledPaint = paint ? this.ctx.paintCompiler.compile(paint) : null;
 
         if (style) {
-            shape.stencilPath = compiledPath.strokeHull;
-            shape.drawPath = compiledPath.shapePath;
-            shape.unstencilPath = compiledPath.strokeHull;
+            shape.stencilPath = residentPathset.strokeHullPath;
+            shape.drawPath = residentPathset.shapePath;
+            shape.unstencilPath = residentPathset.strokeHullPath;
         } else {
-            shape.stencilPath = compiledPath.shapePath;
-            shape.drawPath = compiledPath.drawHull;
+            shape.stencilPath = residentPathset.shapePath;
+            shape.drawPath = residentPathset.drawHullPath;
             shape.unstencilPath = null;
         }
         shape.fillRule = fillRule;

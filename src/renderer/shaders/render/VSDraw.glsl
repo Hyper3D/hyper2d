@@ -2,18 +2,18 @@
 #pragma require Common
 #pragma require DataFetch
 #pragma require Paint
+#pragma require CommandMapping
 
 #pragma parameter c_needsPaint
 
-#pragma attribute a_position
-#pragma attribute a_primitiveType
-#pragma attribute a_commandPtr
-#pragma attribute a_primitiveParams
+#pragma uniform u_rootCommandMappingAddress
+#pragma uniform u_vertexBuffer
 
-attribute vec2 a_position;
-attribute float a_primitiveType;
-attribute float a_commandPtr;
-attribute vec4 a_primitiveParams;
+#pragma attribute a_vertexId
+
+attribute float a_vertexId;
+
+uniform float u_rootCommandMappingAddress;
 
 /** Position in the local and global coordinate */
 varying vec4 v_position;
@@ -30,7 +30,12 @@ varying vec4 v_paintMatrix;
 
 void main()
 {
-	DataBlockFetchInfo cmdDescInfo = openDataBlock(a_commandPtr);
+	// find command descriptor
+	float vertexId = a_vertexId;
+	float commandPtr;
+	findCommandMapping(u_rootCommandMappingAddress, vertexId, commandPtr);
+
+	DataBlockFetchInfo cmdDescInfo = openDataBlock(commandPtr);
 	vec4 cmdDesc[6];
 	cmdDesc[0] = readDataBlock(cmdDescInfo, 0.);
 	cmdDesc[1] = readDataBlock(cmdDescInfo, 1.);
@@ -39,17 +44,26 @@ void main()
 	cmdDesc[4] = readDataBlock(cmdDescInfo, 4.);
 	cmdDesc[5] = readDataBlock(cmdDescInfo, 5.);
 
-	// Local-to-global transform
-	vec2 globalPosition = cmdDesc[0].xy * a_position.x +
-		cmdDesc[0].zw * a_position.y + cmdDesc[1].xy;
+	// vertex fetch
+	float baseVtxAddr = cmdDesc[1].z;
+	float vtxAddr = baseVtxAddr + vertexId * 2.;
+	vec4 vec0 = readVertexBuffer(vtxAddr);
+	vec4 vec1 = readVertexBuffer(vtxAddr + 1.);
+	vec2 position = vec0.xy;
+	float primitiveType = vec0.z;
+	vec4 primitiveParams = vec1;
 
-	v_position = vec4(a_position, globalPosition);
+	// Local-to-global transform
+	vec2 globalPosition = cmdDesc[0].xy * position.x +
+		cmdDesc[0].zw * position.y + cmdDesc[1].xy;
+
+	v_position = vec4(position, globalPosition);
 
 #if c_needsPaint
 	// Paint matrix
 	float paintCoordSpace = cmdDesc[4].w;
 	vec2 paintBasePosition = paintCoordSpace < PaintCoordinateSpaceLocal + 0.5
-		? a_position : globalPosition;
+		? position : globalPosition;
 	v_paintCoord.xy = cmdDesc[3].xy * paintBasePosition.x +
 		cmdDesc[3].zw * paintBasePosition.y + cmdDesc[4].xy;
 	// Other things
@@ -65,8 +79,8 @@ void main()
 	v_scissorCoord = globalPosition * cmdDesc[2].xy + cmdDesc[2].zw;
 
 	// Primitive params
-	v_primitiveParams = a_primitiveParams;
-	v_primitiveType = a_primitiveType;
+	v_primitiveParams = primitiveParams;
+	v_primitiveType = primitiveType;
 
 	// Final position
 	float layer = cmdDesc[1].w;

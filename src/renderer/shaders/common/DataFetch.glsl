@@ -1,11 +1,15 @@
 #pragma require Common
 #pragma uniform u_dataUVCoef
 #pragma uniform u_data
+#pragma uniform u_vertexBufferUVCoef
+#pragma uniform u_vertexBuffer
 
 /** [0.5 / w, 0.5 / w / h, 1 / w, 1 / w / h] */
 uniform highp vec4 u_dataUVCoef;
+uniform highp vec4 u_vertexBufferUVCoef;
 
 uniform highp sampler2D u_data;
+uniform highp sampler2D u_vertexBuffer;
 
 struct DataBlockFetchInfo
 {
@@ -36,3 +40,14 @@ highp vec4 readDataBlock(DataBlockFetchInfo info, highp float offs)
 {
     return texture2D(u_data, info.coord + vec2(offs * u_dataUVCoef.z, 0.));
 }
+
+highp vec2 coordForVertexBufferBlock(highp float addr)
+{
+    return u_vertexBufferUVCoef.xy + u_vertexBufferUVCoef.zw * addr;
+}
+
+highp vec4 readVertexBuffer(highp float addr)
+{
+    return texture2D(u_vertexBuffer, coordForVertexBufferBlock(addr));
+}
+

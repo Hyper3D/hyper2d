@@ -2,7 +2,9 @@
 
 import { Canvas } from "./canvas";
 
-export interface Context
+import { IDisposable } from "../utils/types";
+
+export interface Context extends IDisposable
 {
     /** Creates a Canvas. */
     createCanvas(width: number, height: number): Canvas;

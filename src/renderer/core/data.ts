@@ -96,7 +96,7 @@ export class ShaderDataBuilder
             this.needsReallocation = false;
         }
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height,
-            gl.RGBA, gl.FLOAT, this.data);
+            gl.RGBA, gl.FLOAT, this.data); // TODO: update only the updated part
 
     }
 

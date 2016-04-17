@@ -3,10 +3,8 @@ import { DataFetchShader } from "../common/DataFetch";
 
 export interface VSDrawShader extends DataFetchShader
 {
-    a_position: number;
-    a_primitiveType: number;
-    a_commandPtr: number;
-    a_primitiveParams: number;
+    a_vertexId: number;
+    u_rootCommandMappingAddress: number;
 }
 
 export interface VSDrawShaderStaticParams

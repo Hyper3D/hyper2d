@@ -14,8 +14,8 @@ import { StrokeStyle } from "../frontend/stroke";
 import { Sprite } from "../frontend/sprite";
 import { FillRule } from "../frontend/drawingcontext";
 
-import { globalPathCompiler, CompiledPath } from "./path";
 import { CompiledPaint } from "./paint";
+import { ResidentPath, ResidentPathset } from "./vtxmgr";
 
 import { OverlapDetector, OverlapDetectorMode } from "../utils/overlapdetector";
 
@@ -93,9 +93,9 @@ export class ClippingNode extends Node
 
 export class Shape extends Node
 {
-    stencilPath: CompiledPath;
-    drawPath: CompiledPath;
-    unstencilPath: CompiledPath;
+    stencilPath: ResidentPath;
+    drawPath: ResidentPath;
+    unstencilPath: ResidentPath;
     paint: CompiledPaint;
     fillRule: FillRule;
     matrix: Matrix3;
@@ -187,11 +187,11 @@ class RenderingLayer
     }
 }
 
-const rectanglePathCompiled = (() => {
+const rectanglePath = (() => {
     const builder = new PathBuilder();
     builder.moveTo(0, 0); builder.lineTo(1, 0);
     builder.lineTo(1, 1); builder.lineTo(0, 1);
-    return globalPathCompiler.compile(builder.createPath(PathUsage.Static), null);
+    return builder.createPath(PathUsage.Static);
 })();
 const rectanglePathMatrix = new Matrix3().setIdentity();
 
@@ -204,6 +204,7 @@ export class CommandScheduler
     shapeLayerCompressor: LayerCompressor<Shape>;
     unorderedShapeLayerCompressor: UnorderedLayerCompressor<Shape>;
 
+    rectanglePathCompiled: ResidentPathset;
 
     constructor(private ctx: ContextImpl,
         private backend: Backend,
@@ -216,6 +217,7 @@ export class CommandScheduler
             new LayerCompressor<Shape>(width, height, false);
         this.unorderedShapeLayerCompressor =
             new UnorderedLayerCompressor<Shape>(width, height);
+        this.rectanglePathCompiled = ctx.vertexBufferManager.getResidentPath(rectanglePath, null);
     }
 
     render(root: ClippingNode): void
@@ -398,7 +400,7 @@ export class CommandScheduler
                 cp.clippingLayer = shape.renderingLayerId;
                 cp.scissorMin = shape.visualBoundsMin;
                 cp.scissorMax = shape.visualBoundsMax;
-                backend.stencil(shape.stencilPath, backend.emitCommandDescriptor(),
+                backend.stencil(shape.stencilPath,
                     shape.fillRule);
             }
 
@@ -408,7 +410,7 @@ export class CommandScheduler
                 cp.scissorMin = shape.visualBoundsMin;
                 cp.scissorMax = shape.visualBoundsMax;
                 cp.paint = shape.paint;
-                backend.draw(shape.drawPath, backend.emitCommandDescriptor());
+                backend.draw(shape.drawPath);
             }
 
             for (const shape of group) {
@@ -419,7 +421,7 @@ export class CommandScheduler
                 cp.clippingLayer = shape.renderingLayerId;
                 cp.scissorMin = shape.visualBoundsMin;
                 cp.scissorMax = shape.visualBoundsMax;
-                backend.unstencil(shape.unstencilPath, backend.emitCommandDescriptor());
+                backend.unstencil(shape.unstencilPath);
             }
         }
 
@@ -449,7 +451,7 @@ export class CommandScheduler
                 cp.clippingLayer = shape.renderingLayerId;
                 cp.scissorMin = shape.visualBoundsMin;
                 cp.scissorMax = shape.visualBoundsMax;
-                backend.stencil(shape.stencilPath, backend.emitCommandDescriptor(),
+                backend.stencil(shape.stencilPath,
                     shape.fillRule);
             }
 
@@ -458,7 +460,7 @@ export class CommandScheduler
                 cp.clippingLayer = shape.renderingLayerId;
                 cp.scissorMin = shape.visualBoundsMin;
                 cp.scissorMax = shape.visualBoundsMax;
-                backend.clip(shape.drawPath, backend.emitCommandDescriptor());
+                backend.clip(shape.drawPath);
             }
 
             for (const shape of group) {
@@ -469,7 +471,7 @@ export class CommandScheduler
                 cp.clippingLayer = shape.renderingLayerId;
                 cp.scissorMin = shape.visualBoundsMin;
                 cp.scissorMax = shape.visualBoundsMax;
-                backend.unstencil(shape.unstencilPath, backend.emitCommandDescriptor());
+                backend.unstencil(shape.unstencilPath);
             }
         }
 
@@ -490,7 +492,7 @@ export class CommandScheduler
         e[0] = scissorMax.x - scissorMin.x;
         e[4] = scissorMax.y - scissorMin.y;
         e[6] = scissorMin.x; e[7] = scissorMin.y;
-        backend.unclip(rectanglePathCompiled.shapePath, backend.emitCommandDescriptor());
+        backend.unclip(this.rectanglePathCompiled.shapePath);
     }
 }
 

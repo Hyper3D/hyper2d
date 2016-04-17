@@ -40,8 +40,9 @@ import {
 
 import {
     DrawPrimitiveType,
-    DrawVertexSize
-} from "./vertexbuffer";
+    DrawVertexInfo,
+    QBezierDescInfo
+} from "./vtxmgr";
 
 export class PathCompiler
 {
@@ -128,10 +129,11 @@ export interface CompiledPath
 {
     boundingBoxMin: Vector2;
     boundingBoxMax: Vector2;
-    buffer: Int32Array;
+    fbuffer: Float32Array;
 
-    setCommandDescriptorPointer(ptr: number): void;
-    prepare(dataBuilder: ShaderDataBuilder): void;
+    qbezierDescs: Float32Array;
+
+    setQBezierDescAddress(ptr: number): void;
 }
 
 const compilePathTmp = new Float64Array(8 * 16);
@@ -141,7 +143,7 @@ class CompiledPathImpl implements CompiledPath
     boundingBoxMin: Vector2;
     boundingBoxMax: Vector2;
     buffer: Int32Array;
-    private fbuffer: Float32Array;
+    fbuffer: Float32Array;
     builder: BufferBuilder;
 
     qbezierDescBuilder: BufferBuilder;
@@ -215,42 +217,25 @@ class CompiledPathImpl implements CompiledPath
         this.boundingBoxMax.copyFrom(orig.boundingBoxMax);
 
         // replace PrimitiveType
-        const stride = DrawVertexSize >> 2;
+        const stride = DrawVertexInfo.Size >> 2;
         const f32 = this.fbuffer;
         for (let i = 2; i < f32.length; i += stride) {
             f32[i] = DrawPrimitiveType.Simple;
         }
     }
 
-    setCommandDescriptorPointer(ptr: number): void
+    setQBezierDescAddress(ptr: number): void
     {
-        const stride = DrawVertexSize >> 2;
-        const f32 = this.fbuffer;
-        if (f32[3] == ptr || f32.length == 0) {
-            // no change
-            return;
-        }
-        for (let i = 3; i < f32.length; i += stride) {
-            // set command descriptor pointer
-            f32[i] = ptr;
-        }
-    }
-
-    prepare(dataBuilder: ShaderDataBuilder): void
-    {
-        const outIndex = dataBuilder.allocate(4, this.qbezierDescs.length >> 4);
-        dataBuilder.data.set(this.qbezierDescs, outIndex);
-
-        const stride = DrawVertexSize >> 2;
+        const stride = DrawVertexInfo.Size >> 2;
         const f32 = this.fbuffer;
         const ranges = this.qbezierRanges;
         for (let i = 0; i < ranges.length; i += 2) {
             const start = ranges[i], end = ranges[i + 1];
-            const ptr = (outIndex >> 2) + (i << 1);
             for (let k = start + 7; k < end; k += stride) {
                 // set QuadraticStroke's quadric bezier descriptor pointer
                 f32[k] = ptr;
             }
+            ptr += QBezierDescInfo.NumTexels;
         }
     }
 
@@ -258,7 +243,7 @@ class CompiledPathImpl implements CompiledPath
     {
         const builder = this.builder;
 
-        let addr = builder.allocate(DrawVertexSize * 6) >> 2;
+        let addr = builder.allocate(DrawVertexInfo.Size * 6) >> 2;
         const {f32} = builder;
         f32[addr++] = min.x; f32[addr++] = min.y;
         f32[addr++] = DrawPrimitiveType.Simple; addr += 5;
@@ -302,7 +287,7 @@ class CompiledPathImpl implements CompiledPath
             const y2 = data[i - 1];
             if (lastIndex > 2) {
                 // emit anchor polygn
-                let addr = builder.allocate(DrawVertexSize * 3) >> 2;
+                let addr = builder.allocate(DrawVertexInfo.Size * 3) >> 2;
                 const {f32} = builder;
                 f32[addr++] = data[0]; f32[addr++] = data[1];
                 f32[addr++] = DrawPrimitiveType.Simple; addr += 5;
@@ -332,7 +317,7 @@ class CompiledPathImpl implements CompiledPath
                     const cx = (bx1 + bx2) * 0.5, cy = (by1 + by2) * 0.5;
 
                     // emit discard polygon
-                    let addr = builder.allocate(DrawVertexSize * 9) >> 2;
+                    let addr = builder.allocate(DrawVertexInfo.Size * 9) >> 2;
                     const {f32} = builder;
                     f32[addr++] = x1; f32[addr++] = y1;
                     f32[addr++] = DrawPrimitiveType.Simple; addr += 5;
@@ -402,7 +387,7 @@ class CompiledPathImpl implements CompiledPath
             const cpX1 = epX1 - tanX * widthHalf, cpY1 = epY1 - tanY * widthHalf;
             const cpX2 = epX2 - tanX * widthHalf, cpY2 = epY2 - tanY * widthHalf;
 
-            let addr = builder.allocate(DrawVertexSize * 9) >> 2;
+            let addr = builder.allocate(DrawVertexInfo.Size * 9) >> 2;
             const {f32} = builder;
 
             switch (capStyle) {
@@ -502,7 +487,7 @@ class CompiledPathImpl implements CompiledPath
 
                 switch (joinStyle) {
                     case StrokeJoinStyle.Bevel: {
-                        let addr = builder.allocate(DrawVertexSize * 3) >> 2;
+                        let addr = builder.allocate(DrawVertexInfo.Size * 3) >> 2;
                         const {f32} = builder;
                         if (curl > 0) {
                             const spX = x1 + tanY1 * widthHalf, spY = y1 - tanX1 * widthHalf;
@@ -563,7 +548,7 @@ class CompiledPathImpl implements CompiledPath
                         let q2Ln = 2 / (q2X * q2X + q2Y * q2Y);
                         q2X *= q2Ln; q2Y *= q2Ln;
 
-                        let addr = builder.allocate(DrawVertexSize * 9) >> 2;
+                        let addr = builder.allocate(DrawVertexInfo.Size * 9) >> 2;
                         const {f32} = builder;
                         if (curl > 0) {
                             const spX = x1 + tanY1 * widthHalf, spY = y1 - tanX1 * widthHalf;
@@ -676,7 +661,7 @@ class CompiledPathImpl implements CompiledPath
                             const midLn = 2 / (midX * midX + midY * midY);
                             midX *= midLn; midY *= midLn;
 
-                            let addr = builder.allocate(DrawVertexSize * 6) >> 2;
+                            let addr = builder.allocate(DrawVertexInfo.Size * 6) >> 2;
                             const {f32} = builder;
                             if (curl > 0) {
                                 const spX = x1 + tanY1 * widthHalf, spY = y1 - tanX1 * widthHalf;
@@ -737,7 +722,7 @@ class CompiledPathImpl implements CompiledPath
                             }
                         } else {
                             // bevel join
-                            let addr = builder.allocate(DrawVertexSize * 3) >> 2;
+                            let addr = builder.allocate(DrawVertexInfo.Size * 3) >> 2;
                             const {f32} = builder;
                             if (curl > 0) {
                                 const spX = x1 + tanY1 * widthHalf, spY = y1 - tanX1 * widthHalf;
@@ -783,7 +768,7 @@ class CompiledPathImpl implements CompiledPath
                     const tanX = sadata[saIndex + StrokeAnalysisFields.EndTangentX];
                     const tanY = sadata[saIndex + StrokeAnalysisFields.EndTangentY];
 
-                    let addr = builder.allocate(DrawVertexSize * 12) >> 2;
+                    let addr = builder.allocate(DrawVertexInfo.Size * 12) >> 2;
                     const {f32} = builder;
 
                     const spX1 = x1 + tanY * widthHalf, spY1 = y1 - tanX * widthHalf;
@@ -1012,7 +997,7 @@ class CompiledPathImpl implements CompiledPath
                     }
 
 
-                    let addr = builder.allocate(DrawVertexSize * 3 * (numVertices - 2)) >> 2;
+                    let addr = builder.allocate(DrawVertexInfo.Size * 3 * (numVertices - 2)) >> 2;
                     const {f32} = builder;
                     
                     qbezierRanges.push(addr);
@@ -1062,7 +1047,7 @@ class CompiledPathImpl implements CompiledPath
             const cpX1 = epX1 + tanX * widthHalf, cpY1 = epY1 + tanY * widthHalf;
             const cpX2 = epX2 + tanX * widthHalf, cpY2 = epY2 + tanY * widthHalf;
 
-            let addr = builder.allocate(DrawVertexSize * 6) >> 2;
+            let addr = builder.allocate(DrawVertexInfo.Size * 6) >> 2;
             const {f32} = builder;
 
             switch (capStyle) {

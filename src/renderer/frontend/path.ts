@@ -11,6 +11,10 @@ import {
     StrokeJoinStyle
 } from "./stroke";
 
+import { IDisposable } from "../utils/types";
+
+import { Signal } from "../utils/signal";
+
 import {
     computeBoundingBoxForBezier2,
     computeBoundingBoxForBezier3,
@@ -103,14 +107,16 @@ export const enum PathPointType
     EllipticArc
 }
 
-export class Path
+export class Path implements IDisposable
 {
-    public subpaths: Subpath[];
+    subpaths: Subpath[];
+    onDisposed: Signal<void>;
 
     constructor(
         data: number[][],
         public usage: PathUsage)
     {
+        this.onDisposed = new Signal<void>();
         this.subpaths = data.filter((cb) => cb.length > 3).map((d) => new Subpath(d));
         Object.freeze(this);
     }
@@ -128,6 +134,11 @@ export class Path
         for (const subpath of this.subpaths) {
             subpath.computeBoundingBox(strokeStyle, outMin, outMax);
         }
+    }
+
+    dispose(): void
+    {
+        this.onDisposed.invoke(this, null);
     }
 }
 

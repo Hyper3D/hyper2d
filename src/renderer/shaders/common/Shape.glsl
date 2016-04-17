@@ -46,11 +46,10 @@ bool evaluateShape(
     		highp float invWdthHalf = primitiveParams.z;
     		highp float qDescPtr = primitiveParams.w;
 
-    		DataBlockFetchInfo qDescInfo = openDataBlock(qDescPtr);
     		highp vec4 qDesc[3];
-    		qDesc[0] = readDataBlock(qDescInfo, 0.);
-            qDesc[1] = readDataBlock(qDescInfo, 1.);
-            qDesc[2] = readDataBlock(qDescInfo, 2.);
+    		qDesc[0] = readVertexBuffer(qDescPtr + 0.);
+            qDesc[1] = readVertexBuffer(qDescPtr + 1.);
+            qDesc[2] = readVertexBuffer(qDescPtr + 2.);
 
             highp vec2 localOrigin = qDesc[0].xy;
             highp vec2 bezierC2 = qDesc[0].zw;

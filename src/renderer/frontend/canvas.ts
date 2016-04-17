@@ -3,8 +3,9 @@
 import { DrawingContext } from "./drawingcontext";
 import { Context } from "./context";
 import { Color } from "../utils/color";
+import { IDisposable } from "../utils/types";
 
-export interface Canvas extends DrawingContext
+export interface Canvas extends DrawingContext, IDisposable
 {
     ctx: Context;
 
