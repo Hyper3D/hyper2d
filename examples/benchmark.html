@@ -243,7 +243,7 @@
 			setRunner(new Hyper2DRunner());
 
 			var pos = this.pos = [];
-			for (var i = 0; i < 200; ++i) {
+			for (var i = 0; i < 1000; ++i) {
 				pos.push(Math.random());
 				pos.push(Math.random());
 			}
@@ -253,7 +253,7 @@
 				stats.begin();
 
 				currentRunner.render(function (api) {
-					var sz = currentRunner.height / 25;
+					var sz = currentRunner.height / 80;
 					var t = +new Date() / 1000;
 					for (var i = 0; i < pos.length; i += 2) {
 						var t2 = t * (1 + i / 10000);
