@@ -5,7 +5,9 @@ import { Canvas } from "../frontend/canvas";
 import { CanvasImpl } from "./canvas";
 import { ShaderDataBuilder } from "./data";
 import { GLShaderManager } from "./glshaders";
-import { VertexBufferBuilder } from "./vertexbuffer";
+import { VertexBufferAllocator } from "./vtxalloc";
+import { VertexBufferManager } from "./vtxmgr";
+import { VertexBufferSequenceBuilder } from "./vtxseq";
 import { PaintCompiler } from "./paint";
 import { PassthroughRenderer } from "./passthrough";
 import { GLStateManager } from "./glstate";
@@ -18,7 +20,9 @@ export class ContextImpl implements Context
     shaderManager: GLShaderManager;
     stateManager: GLStateManager;
 
-    vertexBufferBuilder: VertexBufferBuilder;
+    vertexBufferAllocator: VertexBufferAllocator;
+    vertexBufferManager: VertexBufferManager;
+    vertexBufferSequenceBuilder: VertexBufferSequenceBuilder;
     paintCompiler: PaintCompiler;
 
     passthroughRenderer: PassthroughRenderer;
@@ -29,7 +33,9 @@ export class ContextImpl implements Context
         this.ready = false;
         this.shaderDataBuilder = new ShaderDataBuilder(gl);
         this.shaderManager = new GLShaderManager(gl);
-        this.vertexBufferBuilder = new VertexBufferBuilder(gl);
+        this.vertexBufferAllocator = new VertexBufferAllocator(gl);
+        this.vertexBufferManager = new VertexBufferManager(this.vertexBufferAllocator);
+        this.vertexBufferSequenceBuilder = new VertexBufferSequenceBuilder(gl);
         this.paintCompiler = new PaintCompiler(gl);
         this.passthroughRenderer = new PassthroughRenderer(this);
         this.stateManager = new GLStateManager(gl, parameters.fastSetup);
@@ -38,6 +44,11 @@ export class ContextImpl implements Context
     createCanvas(width: number, height: number): Canvas
     {
         return new CanvasImpl(this, width, height);
+    }
+
+    dispose(): void
+    {
+        this.vertexBufferManager.dispose();
     }
 
     checkSetup(): void

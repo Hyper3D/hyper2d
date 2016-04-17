@@ -47,6 +47,9 @@ export class ShaderDataBuilder
     {
         let addr = this.allocatedSize;
 
+        // [Workaround] geometry disappears randomly
+        size += 4; // TODO: find the source of the problem
+        
         // Make sure the data block doesn't span over multiple rows
         if (size > DataWidth) {
             throw new Error("cannot allocate such a huge data block.");
@@ -96,7 +99,7 @@ export class ShaderDataBuilder
             this.needsReallocation = false;
         }
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height,
-            gl.RGBA, gl.FLOAT, this.data);
+            gl.RGBA, gl.FLOAT, this.data); // TODO: update only the updated part
 
     }
 

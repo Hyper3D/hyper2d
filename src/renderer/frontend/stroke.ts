@@ -1,4 +1,7 @@
 
+import { IDisposable } from "../utils/types";
+import { Signal } from "../utils/signal";
+
 export enum StrokeJoinStyle
 {
     Round = 1,
@@ -16,6 +19,8 @@ export enum StrokeCapStyle
 
 export class StrokeStyle
 {
+    onDisposed: Signal<void>;
+
     /**
      * @param width Width of the line.
      * @param joinStyle Join style.
@@ -28,6 +33,13 @@ export class StrokeStyle
         public capStyle: StrokeCapStyle,
         public miterLimit: number)
     {
+        this.onDisposed = new Signal<void>();
+
         Object.freeze(this);
+    }
+
+    dispose(): void 
+    {
+        this.onDisposed.invoke(this, null);
     }
 }

@@ -248,11 +248,57 @@ def render(backend, root_clip_node):
   render_layer([root_clip_node], 0)
 ```
 
+### Usage of Stencil Buffer
+
+The stencil buffer is used to perform a fill according to the fill rules
+(odd-even or non-zero). Let `N` be the bit depth of the stencil buffer.
+The value `1 << (N - 1)` is considered as the zero value. Filling an area
+with the path that has CW winding order increases the value, and vice versa.
+
+For adaptive supersampling, the special value `0` is used to indicate that
+no rendering should be done on the pixel.
+
+### Usage of Depth Buffer
+
+The depth buffer is used to implement the active clipping layers.
+
+
+Data Structures
+---------------
+
+- Command List Texture (a.k.a. Shader Data) is generated every
+  frame and stored to OpenGL texture.
+  - Command Descriptor
+  - Gradient Descriptor
+  - Command Mapping Descriptor
+- Vertex Buffer Texture is only changed when new path geometries was
+  loaded to the graphics system.
+  - Draw Vertex
+  - Quadratic Bezier Descriptor
+- OpenGL Vertex Buffer only stores...
+  - Integer Sequence
+
+### Command Mapping Descriptor
+
+Shader traverses this data structure to decide which command descriptor should
+be used for the current vertex index. This data structure resembles a B+ tree.
+
+- `float[3]` Vertex indices (relative to parent)
+  - If the value is negative, then the value is `-1 - cmd_desc_ptr` where
+    `cmd_desc_ptr` is the pointer to a Command Descriptor.
+- `float[4]` Pointers to children
+
+|       |  `.x` |  `.y` |  `.z` | `.w` |
+|-------|-------|-------|-------|------|
+| `[0]` | `vi0` | `vi1` | `vi2` |      |
+| `[1]` | `c0`  | `c1`  | `c2`  | `c3` |
+
 ### Command Descriptor
 
 * `float[6]` World matrix (`wm00` - `wm12`)
 * `float[4]` Scissor matrix (global coord, `sm00`, `sm11`, `sm02`, `sm12`)
   * `(x, y) = ScissorMatrix * GlobalPos` and the `0 <= x, y < 1` area is drawn
+* `float` Base vertex index (`vidx`)
 * `int8` Clipping layer number (`layer`)
 * `int8` Paint type (`pT`)
 * `int8` Paint coordinate type (`pc`)
@@ -263,9 +309,9 @@ def render(backend, root_clip_node):
 * `float[4]` Paint parameters (`pp0` - `pp3`)
 
 |       |  `.x`  |  `.y`  |  `.z`  |   `.w`  |
-| ----- | ------ | ------ | ------ | ------- |
+|-------|--------|--------|--------|---------|
 | `[0]` | `wm00` | `wm10` | `wm01` | `wm11`  |
-| `[1]` | `wm02` | `wm12` |        | `layer` |
+| `[1]` | `wm02` | `wm12` | `vidx` | `layer` |
 | `[2]` | `sm00` | `sm11` | `sm02` | `sm12`  |
 | `[3]` | `pm00` | `pm10` | `pm01` | `pm11`  |
 | `[4]` | `pm02` | `pm12` | `pT`   | `pc`    |
@@ -283,7 +329,7 @@ def render(backend, root_clip_node):
 | Clip Stroke  | Stroke      | No         | Stencil | Test (NZ) & Erase    | Write      |
 | Unclip       | Rectangle   | No         | Stencil |                      | Test/Write |
 
-### Vertex Format
+### Draw Vertex
 
 * `float[2]` Local 2D coordinate
 * `float` Primitive type
@@ -291,7 +337,6 @@ def render(backend, root_clip_node):
   * `QuadraticFill` - Discard polygon of the quadratic bezier segment (fill only)
   * `Circle` - `length(uv) < 1` (stroke only)
   * `QuadraticStroke` - Stroke of the quadratic bezier segment (stroke only)
-* `float` *Command descriptor pointer*
 * `float[4]` Its meaning depends on the primitive type
   * For `Simple`, stroke UV `float[2]`
   * For `QuadraticFill`, quadratic bezier UV `float[2]`
@@ -300,6 +345,11 @@ def render(backend, root_clip_node):
     * If `stroke_v_side > 1`, however, then the `uv.y * .5 + .5` is used as the stroke V.
   * For `QuadraticStroke`, depressed cubic eq coefs `float[2]`, `2 / stroke_width` `float`,
     *Quadratic bezier descriptor pointer* `float`
+
+|       |  `.x` |  `.y` |  `.z`  |  `.w` |
+|-------|-------|-------|--------|-------|
+| `[0]` | `x`   | `y`   | `type` |       |
+| `[1]` | `sp0` | `sp1` | `sp2`  | `sp3` |
 
 ### Quadratic Bezier Descriptor
 
@@ -314,20 +364,6 @@ def render(backend, root_clip_node):
 | `[1]` | `x3`    | `y3` | `umin` | `urange` |
 | `[2]` | `doffs` |      |        |          |
 
-
-### Usage of Stencil Buffer
-
-The stencil buffer is used to perform a fill according to the fill rules
-(odd-even or non-zero). Let `N` be the bit depth of the stencil buffer.
-The value `1 << (N - 1)` is considered as the zero value. Filling an area
-with the path that has CW winding order increases the value, and vice versa.
-
-For adaptive supersampling, the special value `0` is used to indicate that
-no rendering should be done on the pixel.
-
-### Usage of Depth Buffer
-
-The depth buffer is used to implement the active clipping layers.
 
 References
 ----------

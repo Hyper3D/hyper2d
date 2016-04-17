@@ -5,7 +5,6 @@ import {
 } from "./context";
 
 import { BufferBuilder } from "../utils/bufferbuilder";
-import { CompiledPath } from "./path";
 import { GLProgramInfo } from "./glshaders";
 import { CompiledPaint } from "./paint";
 import { Color } from "../utils/color";
@@ -13,8 +12,9 @@ import { Color } from "../utils/color";
 import { FillRule } from "../frontend/drawingcontext";
 
 import {
-    DrawVertexSize, DrawVertexSizeBits
-} from "./vertexbuffer";
+    DrawVertexInfo,
+    ResidentPath
+} from "./vtxmgr";
 
 import { FSDrawShader, FSDrawShaderStaticParams } from "../shaders/render/FSDraw";
 import { VSDrawShader, VSDrawShaderStaticParams } from "../shaders/render/VSDraw";
@@ -25,6 +25,8 @@ import {
 } from "../utils/geometry";
 
 import { GLStateFlags } from "./glstate";
+
+import { CommandMappingGenerator } from "./cmdmapping";
 
 export interface CommandParameter
 {
@@ -42,6 +44,7 @@ type DrawShaderStaticParams = FSDrawShaderStaticParams & VSDrawShaderStaticParam
 const enum CommandDescFields
 {
     WorldMatrix = 0,
+    VertexBaseAddress = 6,
     Layer = 7,
     ScissorMatrix = 8,
     Paint = 12
@@ -57,12 +60,18 @@ const enum CommandType
     Unclip
 }
 
+const enum PathCommandFields
+{
+    CommandMappingDescriptor = 0,
+    NumVertices = 1,
+    NumFields = 2
+}
+
 export class Backend
 {
     private cmds: number[];
     private lastCmdIndex: number;
 
-    private pathPrepared: Map<CompiledPath, boolean>;
     private paintPrepared: Map<CompiledPaint, boolean>;
     private paintTextureMap: Map<WebGLTexture, number>;
     private paintTextureList: WebGLTexture[];
@@ -71,17 +80,22 @@ export class Backend
     private stencilShader: GLProgramInfo<DrawShaderParams>;
     private paintShader: GLProgramInfo<DrawShaderParams>;
 
+    private cmdMappingGenerator: CommandMappingGenerator;
+
     commandParameter: CommandParameter;
+
+    private requiredMaxNumVerticesPerBatch: number;
 
     constructor(private ctx: ContextImpl)
     {
-        this.pathPrepared = new Map<CompiledPath, boolean>();
         this.paintPrepared = new Map<CompiledPaint, boolean>();
         this.paintTextureMap = new Map<WebGLTexture, number>();
         this.cmdToPaintTextureMap = new Map<number, number>();
         this.paintTextureList = [];
         this.cmds = [];
         this.lastCmdIndex = -1;
+        this.cmdMappingGenerator = new CommandMappingGenerator();
+        this.requiredMaxNumVerticesPerBatch = 0;
 
         const {shaderManager} = ctx;
         this.stencilShader = shaderManager.getProgram<DrawShaderParams>({
@@ -109,9 +123,8 @@ export class Backend
     /**
      * Compiles the contents of <code>this.commandParameter</code> to the shader
      * data, and returns the pointer to the command descriptor.
-     * FIXME: no longer needed to be public
      */
-    emitCommandDescriptor(): number
+    private emitCommandDescriptor(vertexBaseAddress: number): number
     {
         const dataBuilder = this.ctx.shaderDataBuilder;
         const idx = dataBuilder.allocate(6);
@@ -126,6 +139,9 @@ export class Backend
         data[idx + CommandDescFields.WorldMatrix + 3] = worldMatrix.e[4];
         data[idx + CommandDescFields.WorldMatrix + 4] = worldMatrix.e[6];
         data[idx + CommandDescFields.WorldMatrix + 5] = worldMatrix.e[7];
+
+        // vertex base address
+        data[idx + CommandDescFields.VertexBaseAddress] = vertexBaseAddress;
 
         // layer
         data[idx + CommandDescFields.Layer] = parm.clippingLayer * (1 / 8192);
@@ -142,21 +158,7 @@ export class Backend
         // paint
         const {paint} = parm;
         if (paint) {
-            if (!this.paintPrepared.has(paint)) {
-                this.paintPrepared.set(paint, true);
-                paint.prepare(this.ctx.shaderDataBuilder);
-            }
-
             data.set(paint.data, idx + CommandDescFields.Paint);
-
-            let paintTextureIndex = paint.texture ?
-                this.paintTextureMap.get(paint.texture) : -1;
-            if (paintTextureIndex == null) {
-                this.paintTextureMap.set(paint.texture,
-                    paintTextureIndex = this.paintTextureList.length);
-                this.paintTextureList.push(paint.texture);
-            }
-            this.cmdToPaintTextureMap.set(idx >> 2, paintTextureIndex);
         }
 
         return idx >> 2;
@@ -175,24 +177,59 @@ export class Backend
         cmds.push(color.a);
     }
 
-    private simpleCommand(path: CompiledPath, cmdDescPtr: number, type: CommandType,
-        param1?: number, param2?: number): void
+    private finalizeCommand(): void
     {
-        if (!this.pathPrepared.has(path)) {
-            this.pathPrepared.set(path, true);
-            path.prepare(this.ctx.shaderDataBuilder);
-        }
-
-        path.setCommandDescriptorPointer(cmdDescPtr);
-
-        const bb = this.ctx.vertexBufferBuilder.builder;
-        const pathdata = path.buffer;
-        const pathaddr = bb.allocate(pathdata.length << 2);
-        bb.s32.set(pathdata, pathaddr >> 2);
-
-        if (pathdata.length === 0) {
+        const {cmds, lastCmdIndex} = this;
+        if (lastCmdIndex < 0) {
             return;
         }
+
+        const cmdType = cmds[lastCmdIndex];
+
+        switch (cmdType) {
+            case CommandType.Stencil:
+            case CommandType.Draw:
+            case CommandType.Unstencil:
+            case CommandType.Clip:
+            case CommandType.Unclip: {
+                const {cmdMappingGenerator: cmg} = this;
+                cmg.finalize();
+                cmds[cmds.length - PathCommandFields.NumFields
+                    + PathCommandFields.NumVertices] = cmg.totalNumVertices;
+
+                this.requiredMaxNumVerticesPerBatch = Math.max(
+                    this.requiredMaxNumVerticesPerBatch, cmg.totalNumVertices);
+
+                const {shaderDataBuilder} = this.ctx;
+                const {f32} = cmg.builder;
+                // TODO: Command Mapping might not fit in single row!
+                const cmgaddr = shaderDataBuilder.allocate(cmg.builder.size >> 4);
+                shaderDataBuilder.data.set(f32.subarray(0, 
+                    cmg.builder.size >> 2), cmgaddr);
+
+                cmds[cmds.length - PathCommandFields.NumFields
+                    + PathCommandFields.CommandMappingDescriptor] = cmgaddr >> 2;
+
+                cmg.reset();
+                break;
+            }
+            case CommandType.Clear:
+                break;
+            default:
+                throw new Error("bad CommandType");
+        }
+
+        this.lastCmdIndex = -1;
+    }
+
+    private simpleCommand(path: ResidentPath, type: CommandType,
+        param1?: number, param2?: number): void
+    {
+        if (path == null) {
+            return;
+        }
+
+        const cmdDescPtr = this.emitCommandDescriptor(path.address);
 
         const {cmds, lastCmdIndex} = this;
         if (lastCmdIndex >= 0 && cmds[lastCmdIndex] == type &&
@@ -205,16 +242,9 @@ export class Backend
              cmds[lastCmdIndex + 2] === -1 ||
              param2 === -1)) {
             // Combine with the previous command
-            let idx = lastCmdIndex + 2;
-            if (param1 != null) {
-                ++idx;
-            }
-            if (param2 != null) {
-                ++idx;
-            }
-            cmds[idx] += pathdata.length << 2;
         } else {
             // Start new command
+            this.finalizeCommand();
             this.lastCmdIndex = cmds.length;
             cmds.push(type);
             if (param1 != null){
@@ -223,79 +253,89 @@ export class Backend
             if (param2 != null){
                 cmds.push(param2);
             }
-            cmds.push(pathaddr);
-            cmds.push(pathdata.length << 2);
+            for (let i = 0; i < PathCommandFields.NumFields; ++i)
+                cmds.push(0); // dummy
         }
+
+        this.cmdMappingGenerator.processOne(path.numVertices, cmdDescPtr);
     }
 
-    stencil(path: CompiledPath, cmdDescPtr: number, fillRule: FillRule): void {
-        this.simpleCommand(path, cmdDescPtr, CommandType.Stencil, fillRule);
+    stencil(path: ResidentPath, fillRule: FillRule): void {
+        this.simpleCommand(path, CommandType.Stencil, fillRule);
     }
 
-    unstencil(path: CompiledPath, cmdDescPtr: number): void {
-        this.simpleCommand(path, cmdDescPtr, CommandType.Unstencil);
+    unstencil(path: ResidentPath): void {
+        this.simpleCommand(path, CommandType.Unstencil);
     }
 
-    clip(path: CompiledPath, cmdDescPtr: number): void
+    clip(path: ResidentPath): void
     {
-        this.simpleCommand(path, cmdDescPtr, CommandType.Clip);
+        this.simpleCommand(path, CommandType.Clip);
     }
 
-    unclip(path: CompiledPath, cmdDescPtr: number): void
+    unclip(path: ResidentPath): void
     {
-        this.simpleCommand(path, cmdDescPtr, CommandType.Unclip);
+        this.simpleCommand(path, CommandType.Unclip);
     }
 
-    draw(path: CompiledPath, cmdDescPtr: number): void
+    draw(path: ResidentPath): void
     {
-        const paintTextureIndex = this.cmdToPaintTextureMap.get(cmdDescPtr);
+        const paint = this.commandParameter.paint;
+        if (!this.paintPrepared.has(paint)) {
+            this.paintPrepared.set(paint, true);
+            paint.prepare(this.ctx.shaderDataBuilder);
+        }
+
+        let paintTextureIndex = paint.texture ?
+            this.paintTextureMap.get(paint.texture) : -1;
         if (paintTextureIndex == null) {
-            throw new Error("Command descriptor wasn't emit with a paint");
+            this.paintTextureMap.set(paint.texture,
+                paintTextureIndex = this.paintTextureList.length);
+            this.paintTextureList.push(paint.texture);
         }
-        this.simpleCommand(path, cmdDescPtr, CommandType.Draw, paintTextureIndex);
+
+        this.simpleCommand(path, CommandType.Draw, paintTextureIndex);
     }
 
     private executeDrawShader(shader: GLProgramInfo<DrawShaderParams>, cmdIdx: number): void
     {
         const {ctx, cmds} = this;
-        const {gl, stateManager} = ctx;
+        const {gl, stateManager, vertexBufferSequenceBuilder: vbsb} = ctx;
 
         shader.use();
         stateManager.enabledVertexAttribArrays =
-            (1 << shader.params.a_position) |
-            (1 << shader.params.a_commandPtr) |
-            (1 << shader.params.a_primitiveType) |
-            (1 << shader.params.a_primitiveParams);
+            (1 << shader.params.a_vertexId);
         gl.uniform1i(shader.params.u_data, 0);
         gl.uniform1i(shader.params.u_texture, 1);
+        gl.uniform1i(shader.params.u_vertexBuffer, 2);
 
-        const offs = cmds[cmdIdx];
-        gl.vertexAttribPointer(shader.params.a_position, 2, gl.FLOAT,
-            false, DrawVertexSize, offs);
-        gl.vertexAttribPointer(shader.params.a_primitiveType, 1, gl.FLOAT,
-            false, DrawVertexSize, offs + 8);
-        gl.vertexAttribPointer(shader.params.a_commandPtr, 1, gl.FLOAT,
-            false, DrawVertexSize, offs + 12);
-        gl.vertexAttribPointer(shader.params.a_primitiveParams, 4, gl.FLOAT,
-            false, DrawVertexSize, offs + 16);
-        gl.drawArrays(gl.TRIANGLES, 0, cmds[cmdIdx + 1] >> DrawVertexSizeBits);
-        if (cmds[cmdIdx + 1] >> DrawVertexSizeBits === 0) {
-            throw "hoge";
-        }
+        gl.uniform1f(shader.params.u_rootCommandMappingAddress, 
+            cmds[cmdIdx + PathCommandFields.CommandMappingDescriptor]);
+
+        gl.vertexAttribPointer(shader.params.a_vertexId, 1, gl.FLOAT,
+            false, 4, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, cmds[cmdIdx + PathCommandFields.NumVertices]);
     }
 
     complete(): void
     {
         const {ctx, cmds} = this;
-        const {shaderDataBuilder, vertexBufferBuilder,
-            gl, stateManager, shaderManager} = ctx;
+        const {shaderDataBuilder, vertexBufferAllocator,
+            gl, stateManager, shaderManager, vertexBufferSequenceBuilder} = ctx;
+
+        this.finalizeCommand();
 
         shaderDataBuilder.updateTexture();
-        vertexBufferBuilder.updateBuffer();
+        vertexBufferAllocator.updateTexture();
         shaderDataBuilder.updateGlobalUniform(shaderManager);
+        vertexBufferAllocator.updateGlobalUniform(shaderManager);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferBuilder.vbo);
-        stateManager.bindTexture(gl.TEXTURE0, gl.TEXTURE_2D, shaderDataBuilder.texture);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBufferSequenceBuilder.vbo);
+        vertexBufferSequenceBuilder.updateBuffer(this.requiredMaxNumVerticesPerBatch);
+        stateManager.bindTexture(gl.TEXTURE0, gl.TEXTURE_2D, 
+            shaderDataBuilder.texture);
+        stateManager.bindTexture(gl.TEXTURE2, gl.TEXTURE_2D, 
+            vertexBufferAllocator.texture);
 
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -337,7 +377,7 @@ export class Backend
                     }
                     gl.depthFunc(gl.GEQUAL);
                     this.executeDrawShader(shader, i + 2);
-                    i += 4;
+                    i += 2 + PathCommandFields.NumFields;
                     break;
                 }
                 case CommandType.Unstencil: {
@@ -352,7 +392,7 @@ export class Backend
                     gl.stencilMask(0xff);
                     gl.depthFunc(gl.GEQUAL);
                     this.executeDrawShader(shader, i + 1);
-                    i += 3;
+                    i += 1 + PathCommandFields.NumFields;
                     break;
                 }
                 case CommandType.Draw: {
@@ -373,7 +413,7 @@ export class Backend
                     gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
                     gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
                     this.executeDrawShader(shader, i + 2);
-                    i += 4;
+                    i += 2 + PathCommandFields.NumFields;
                     break;
                 }
                 case CommandType.Clip: {
@@ -388,7 +428,7 @@ export class Backend
                     gl.stencilFunc(gl.NOTEQUAL, 0, 0xff);
                     gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
                     this.executeDrawShader(shader, i + 1);
-                    i += 3;
+                    i += 1 + PathCommandFields.NumFields;
                     break;
                 }
                 case CommandType.Unclip: {
@@ -400,7 +440,7 @@ export class Backend
                         GLStateFlags.ColorWriteDisabled;
                     gl.depthFunc(gl.GREATER);
                     this.executeDrawShader(shader, i + 1);
-                    i += 3;
+                    i += 1 + PathCommandFields.NumFields;
                     break;
                 }
                 default:
@@ -416,15 +456,15 @@ export class Backend
         const {ctx, cmds} = this;
 
         ctx.shaderDataBuilder.reset();
-        ctx.vertexBufferBuilder.reset();
 
         this.paintPrepared.clear();
-        this.pathPrepared.clear();
         this.paintTextureMap.clear();
+        this.cmdMappingGenerator.reset();
         this.cmdToPaintTextureMap.clear();
         this.paintTextureList.length = 0;
         cmds.length = 0;
         this.lastCmdIndex = -1;
+        this.requiredMaxNumVerticesPerBatch = 0;
     }
 }
 
