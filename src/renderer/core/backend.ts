@@ -202,6 +202,7 @@ export class Backend
 
                 const {shaderDataBuilder} = this.ctx;
                 const {f32} = cmg.builder;
+                // TODO: Command Mapping might not fit in single row!
                 const cmgaddr = shaderDataBuilder.allocate(cmg.builder.size >> 4);
                 shaderDataBuilder.data.set(f32.subarray(0, 
                     cmg.builder.size >> 2), cmgaddr);
