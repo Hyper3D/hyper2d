@@ -1302,9 +1302,18 @@ class PreprocessedSubpath
                 case PathPointType.Bezier2: {
                     const x2 = inData[i + 1], y2 = inData[i + 2];
                     const x3 = inData[i + 3], y3 = inData[i + 4];
-                    if (x2 === x1 && y2 === y1 && x3 === x2 && y3 === y2) {
-                        i += 5;
-                        continue;
+                    if ((x2 === x1 && y2 === y1) || (x2 === x3 && y2 === y3)) {
+                        if (x1 === x3 && y1 === y3) {
+                            i += 5;
+                            continue;
+                        } else {
+                            ++numSegments;
+                            outData.push(PathPointType.Line);
+                            outData.push(x3);
+                            outData.push(y3);
+                            i += 5;
+                            continue;
+                        }
                     }
                     ++numSegments;
                     outData.push(PathPointType.Bezier2);
@@ -1324,6 +1333,25 @@ class PreprocessedSubpath
                         x4 === x3 && y4 === y3) {
                         i += 7;
                         continue;
+                    }
+                    if (x2 === x1 && y2 === y1) {
+                        if ((x3 === x4 && y3 === y4) || (x3 === x2 && y3 === y2)) {
+                            ++numSegments;
+                            outData.push(PathPointType.Line);
+                            outData.push(x4);
+                            outData.push(y4);
+                            i += 7;
+                            continue;
+                        }
+                    } else if (x3 === x4 && y3 === y4) {
+                        if (x2 === x3 && y2 === y3) {
+                            ++numSegments;
+                            outData.push(PathPointType.Line);
+                            outData.push(x4);
+                            outData.push(y4);
+                            i += 7;
+                            continue;
+                        }
                     }
                     numSegments += decomposeBezier3(x1, y1, x2, y2, x3, y3, x4, y4, 
                         tolerance, outData);
